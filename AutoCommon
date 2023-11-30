@@ -1,0 +1,502 @@
+package edu.elon.robotics.auto;
+
+/**
+ * General autonomous methods.
+ */
+
+import static android.icu.lang.UProperty.MATH;
+import static edu.elon.robotics.RobotHardware.BASE_POWER;
+import static edu.elon.robotics.RobotHardware.RAMP_TICKS;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.util.ElapsedTime;
+
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
+
+import edu.elon.robotics.RobotHardware;
+
+public class AutoCommon extends LinearOpMode {
+
+    protected RobotHardware robot;
+
+    ElapsedTime timer = new ElapsedTime();
+
+
+    public void runOpMode() {
+        robot = new RobotHardware(hardwareMap);
+    }
+
+    // Lab 2
+    protected void driveForTime(double power, long milliseconds){
+        robot.startMove(power,0,0,0);
+        sleep(milliseconds);
+        robot.startMove(0,0,0,0);
+    }
+    protected void strafeForTime(double power, long milliseconds){
+        robot.startMove(0,-0.5,0,0);
+        sleep(milliseconds);
+        robot.startMove(0,0.5,0,0);
+        sleep(milliseconds);
+        robot.startMove(0,-0.5,0,0);
+    }
+
+    protected void turnForTime(double power, long milliseconds){
+        robot.startMove(0,0,0.5,0);
+        sleep(milliseconds);
+        robot.startMove(0,0,0.5,0);
+
+    }
+    // Lab 4
+    public void rampPower(int num_ticks) {
+        // Pass in number of total ticks desired, KNOWING the distance you want to move.
+        // Declare a centimeters variable that's created using the equation from the graph
+        // and Base power chooses the graph.
+        double reqPower = 0.8;    // requested power
+
+        double curTicks = 0;        // current number of ticks from the motor
+        double curPower = RobotHardware.BASE_POWER;// current power of the motor
+
+        // reset the encoders
+        robot.resetDriveEncoders();
+
+        // ramp up to the requested power
+        // curPower = RobotHardware.BASE_POWER;
+        while (curTicks < RobotHardware.RAMP_TICKS && opModeIsActive() ) {
+            robot.startMove(curPower,0,0,0);
+            curTicks = robot.motorLeft.getCurrentPosition();
+            curPower = BASE_POWER + (curTicks / RAMP_TICKS * (reqPower - BASE_POWER));
+        }
+
+        while (curTicks >= RAMP_TICKS && curTicks <= (num_ticks - RAMP_TICKS)  && opModeIsActive()){
+            robot.startMove(curPower,0,0,0);
+            curTicks = robot.motorLeft.getCurrentPosition();
+        }
+
+        while (curTicks < num_ticks  && opModeIsActive()) {
+            robot.startMove(curPower,0,0,0);
+            curTicks = robot.motorLeft.getCurrentPosition();
+            curPower = BASE_POWER + ((num_ticks - curTicks) / RAMP_TICKS * (reqPower - BASE_POWER));
+        }
+
+        robot.startMove(0,0,0,0);
+    }
+    // Lab 5
+    protected void turnAngle(double degree, double maxPower){
+        //waitForStart();
+        double actual_degree = degree;
+        robot.resetDriveEncoders();
+
+        double ticks = robot.convertDegreesToTicks(actual_degree);
+
+        robot.startMove(0,0, Math.abs(maxPower)*Math.signum(ticks),0);
+
+        while (Math.abs(robot.motorLeft.getCurrentPosition()) < Math.abs(ticks) && opModeIsActive()){
+
+        }
+        robot.startMove(0,0,0,0);
+
+    }
+
+    protected void driveDistance (double cmForward, double cmSide, double maxPower){
+        robot.resetDriveEncoders();
+
+        double d = Math.sqrt(cmForward*cmForward + cmSide*cmSide);
+        robot.startMove(Math.abs(maxPower)*(cmForward/d), Math.abs(maxPower)*(cmSide/d)*-1, 0, 0);
+
+        while (Math.abs(robot.motorLeft.getCurrentPosition()) < robot.convertDistanceToTicks(d) && opModeIsActive()){
+
+        }
+        robot.startMove(0,0,0,0);
+
+    }
+
+    protected void drivePattern(){
+        // counter-clockwise is negative
+        driveDistance(150,0,0.3);
+        sleep(100);
+        driveDistance(-50,0,0.3);
+        sleep(100);
+        turnAngle(-90,0.8);
+        sleep(100);
+        driveDistance(100,0,0.3);
+        sleep(100);
+        turnAngle(70,0.3);
+        sleep(100);
+        driveDistance(-106.42,0,0.3);
+        sleep(100);
+        turnAngle(-250,0.3);
+        sleep(100);
+        driveDistance(63.6,0,0.3);
+        sleep(100);
+        turnAngle(-90,0.3);
+        sleep(100);
+    }
+    // Lab 6
+    protected double getHeading(){
+        YawPitchRollAngles robotOrientation = robot.imu.getRobotYawPitchRollAngles();
+
+        double orientation = robotOrientation.getYaw(AngleUnit.DEGREES);
+
+        return orientation;
+
+    }
+
+    protected void resetHeading(){
+
+        robot.imu.resetYaw();
+    }
+
+    protected void turnIMU(double degrees, double power){
+        // reset the yaw angle
+        //robot.imu.resetYaw();
+        resetHeading();
+
+
+        //start the motors turning the robot
+        //wait until the heading of the robot matches the desired heading
+        while(Math.abs(getHeading()) < Math.abs(degrees)){
+            double curDegrees = Math.abs(getHeading());
+
+            if (curDegrees >= Math.abs(degrees)){
+                robot.startMove(0,0,Math.signum(degrees) * 0.3,0);
+            } else {
+                robot.startMove(0,0,Math.signum(degrees) * Math.abs(power),0);
+            }
+
+        }
+        robot.startMove(0,0,0,0);
+    }
+
+    protected void driveIMU(double cm, double power){
+        // Reset heading and encoder
+        resetHeading();
+        robot.resetDriveEncoders();
+
+        final double kp = 0.01;
+
+
+        while (Math.abs(robot.motorRight.getCurrentPosition()) < robot.convertDistanceToTicks(Math.abs(cm)) && opModeIsActive()) {
+            double currentHeading = getHeading();
+            double headError = currentHeading;
+            double auxPower = kp * headError;
+
+            robot.startMove(Math.signum(cm) * Math.abs(power), 0, auxPower, 0);
+        }
+        robot.startMove(0, 0, 0, 0);
+
+    }
+
+    // Lab 7
+
+    protected void driveHeading(double distance, double heading, double maxPower) {
+
+        double headingRadians = Math.toRadians(heading);
+        double cmForward = distance * Math.cos(headingRadians);
+        double cmSide = distance * Math.sin(headingRadians);
+
+        driveDistance(cmForward, cmSide, maxPower);
+    }
+
+    protected void driveUntilTouch(double power){
+        while (robot.touchSensor.getState()== true){
+            robot.startMove(power, 0, 0, 0);
+        }
+        robot.startMove(0, 0, 0, 0);
+
+    }
+
+    protected void driveToCalibrateLightSensor() {
+        robot.minBrightness = robot.colorSensor.alpha();
+        robot.maxBrightness = robot.colorSensor.alpha();
+
+        robot.resetDriveEncoders();
+
+        robot.startMove(0.3, 0, 0, 0);
+        while (robot.motorLeft.getCurrentPosition() < robot.convertDistanceToTicks(20) ) {
+
+            double brightness = robot.colorSensor.alpha();
+
+            if (brightness < robot.minBrightness) {
+                robot.minBrightness = (int)brightness;
+
+            }
+            if (brightness > robot.maxBrightness) {
+                robot.maxBrightness = (int) brightness;
+
+            }
+        }
+        robot.startMove(0, 0, 0, 0);
+
+        //System.out.println("Min Brightness: " + robot.minBrightness);
+        //System.out.println("Max Brightness: " + robot.maxBrightness);
+/*
+        telemetry.addData("MinBrightness",robot.minBrightness);
+        telemetry.update();
+        sleep(5000);
+
+        telemetry.addData("MaxBrightness",robot.maxBrightness);
+        telemetry.update();
+        sleep(5000);
+
+ */
+    }
+
+    protected void countLines(){
+        driveToCalibrateLightSensor();
+        boolean on_line = false;
+        int numLines = 0;
+     
+
+        while (robot.touchSensor.getState()== true){
+            robot.startMove(0.05, 0, 0, 0);
+            double brightness = robot.colorSensor.alpha();
+
+            if (on_line == false) {
+                if (brightness > 0.5 * robot.maxBrightness) {
+                    numLines = numLines + 1;
+                    on_line = true;
+                    System.out.println("line added");
+                }
+            } else if (brightness < 0.5 * robot.maxBrightness) {
+                on_line = false;
+            }
+
+
+        }
+        int final_distance_ticks = robot.motorLeft.getCurrentPosition();
+        double distance =  robot.convertTicksToDistance(20 + final_distance_ticks);
+        sleep(100);
+
+        driveDistance(-distance,0,0.3);
+
+        //Print out number of lines
+        //System.out.println("Number of lines: " + numLines);
+        telemetry.addData("Number of Lines", numLines);
+        telemetry.update();
+
+        sleep(10000);
+
+        //Print the distance
+        //System.out.println("Distance: " + distance);
+        telemetry.addData("Distance", distance);
+        telemetry.update();
+
+        sleep(10000);
+
+    }
+
+    protected void MeasuringLinesWidth(){
+        driveToCalibrateLightSensor();
+        boolean on_line = false;
+        int numLines = 0;
+        double lineWidth;
+
+
+        while (robot.touchSensor.getState()== true){
+            robot.startMove(0.15, 0, 0, 0);
+            double brightness = robot.colorSensor.alpha();
+
+            if (on_line == false) {
+                if (brightness > 0.5 * robot.maxBrightness) {
+                    numLines = numLines + 1;
+                    on_line = true;
+                    int final_distance_ticks = robot.motorLeft.getCurrentPosition();
+                    double width =  robot.convertTicksToDistance(final_distance_ticks);
+                    System.out.println( "LINEWIDTH:  Line #" + numLines + "=" + width + "cm");
+                }
+            } else if (brightness < 0.5 * robot.maxBrightness) {
+                on_line = false;
+            }
+
+            robot.resetDriveEncoders();
+        }
+
+    }
+
+    // Lab 8
+
+    protected void turnAngleCS(double degree, double maxPower){
+        robot.resetDriveEncoders();
+        double ticks = robot.convertDegreesToTicks(degree);
+
+        robot.startMove(0,0, Math.abs(maxPower)*Math.signum(ticks),0);
+
+        while (Math.abs(robot.motorLeft.getCurrentPosition()) < Math.abs(ticks) && opModeIsActive()) {
+
+            double minBrightness = 0.7 * robot.colorSensor.alpha();
+            double maxBrightness = 0.8 * robot.colorSensor.alpha();
+
+            double brightness = robot.colorSensor.alpha();
+
+            if (brightness < minBrightness) {
+                robot.minBrightness = (int) brightness;
+
+            }
+            if (brightness > maxBrightness) {
+                robot.maxBrightness = (int) brightness;
+
+            }
+        }
+        robot.startMove(0,0,0,0);
+
+    }
+
+    protected void calibrateLightSensor(){
+
+        int degrees = 0;
+        while (degrees < 180 && opModeIsActive()) {
+
+            turnAngleCS(-45, 0.3);
+            degrees = degrees + 45;
+            turnAngleCS(90, 0.3);
+            degrees = degrees + 90;
+            turnAngleCS(-45, 0.3);
+            degrees = degrees + 45;
+
+        }
+            telemetry.addData("Max value", robot.maxBrightness);
+            telemetry.update();
+            sleep(1000);
+
+            telemetry.addData("Min value", robot.minBrightness);
+            telemetry.update();
+            sleep(1000);
+
+    }
+
+    protected void pController(){
+        robot.startMove(0.2,0,0,0);
+
+
+        double Kp = 0.3 / ((robot.maxBrightness - robot.minBrightness)/2) ;
+
+        double error;
+        double turn;
+        int desiredBrightness;
+        timer.reset();
+
+        while (opModeIsActive()){
+
+            double value = robot.colorSensor.alpha();
+
+            System.out.println("KPCONTROL: " + timer.milliseconds() + "," + value);
+            desiredBrightness = (robot.maxBrightness + robot.minBrightness) / 2;
+            error = robot.colorSensor.alpha() - desiredBrightness;
+            turn = Kp * error;
+            robot.startMove(0.2,0,turn,0);
+        }
+
+
+    }
+
+    protected void pidController(){
+        double Abspower = Math.abs(0.15);
+        double turnPower;
+
+
+        double prevError = 0;
+        double difference = 0;
+        double initialError = 0;
+        double totError=0;
+
+        double targetBrightness = (robot.minBrightness + robot.maxBrightness) / 2;
+
+        double Kc = (1 / targetBrightness) * 0.6;
+        double Kp = Kc * 0.5;
+        //double Pc = 0.2;
+        double Pc = 0.25;
+        //double Pc = 0.307;
+        double Dt = 0.03;
+
+        double Ki= 2.0 * Kp * (Dt/Pc);
+        double Kd= Kp * Pc/(8 * Dt);
+
+        //robot.startMove(Abspower, 0, 0, 0);
+        while (opModeIsActive()) {
+            prevError = initialError;
+            initialError = (targetBrightness - robot.colorSensor.alpha());
+            difference = initialError - prevError;
+            totError = 0.8 * totError + initialError;
+            turnPower = (Kp * initialError)+(Ki * totError)+(Kd * difference);
+
+            robot.startMove(Abspower, 0, turnPower, 0);
+
+
+        }
+
+
+        /*
+        ElapsedTime loopTimer = new ElapsedTime();
+        robot.startMove(0.2,0,0,0);
+
+        //double Kp = 0.3 / ((robot.maxBrightness - robot.minBrightness)/2) ;
+
+        double error;
+        double turn;
+        int desiredBrightness;
+        timer.reset();
+
+        while (opModeIsActive()){
+            loopTimer.reset();
+
+            //PID Calculations
+            double Kc = 0.6;
+            double Kp = Kc * 0.3;
+            double Pc = 0.307;
+            double dT = 0.03;
+
+            // ki
+            double ki = 2.0 * (Kp) * dT / Pc;
+            // kd
+            double kd = Kp * Pc /  (8*dT);
+            double value = robot.colorSensor.alpha();
+
+            System.out.println("KPCONTROL: " + timer.milliseconds() + "," + value);
+            desiredBrightness = (robot.maxBrightness + robot.minBrightness) / 2;
+            error = robot.colorSensor.alpha() - desiredBrightness;
+            turn = Kp * error;
+            robot.startMove(0.2,0,turn,0);
+
+
+            // Force the loop to take 30 ms total
+            sleep(30-Math.round(loopTimer.milliseconds()));
+        }
+
+         */
+
+    }
+    protected void lineFollower(){
+        calibrateLightSensor();
+        //pController();
+        pidController();
+    }
+
+
+    protected void testing(){
+        driveToCalibrateLightSensor();
+        boolean on_line = false;
+
+            robot.startMove(0.05, 0, 0, 0);
+            double brightness = robot.colorSensor.alpha();
+
+            while (on_line == false) {
+                if (brightness > 0.5 * robot.maxBrightness) {
+                    on_line = true;
+                    robot.startMove(0,0,0,0);
+                } else if (brightness < 0.5 * robot.maxBrightness) {
+                    on_line = false;
+                }
+            }
+
+
+
+    }
+
+
+
+
+
+
+}
