@@ -1,0 +1,98 @@
+package edu.elon.robotics;
+
+
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+
+
+import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+
+
+import edu.elon.robotics.auto.AutoCommon;
+
+
+@Autonomous(name="Parking", group = "labs")
+public class Parking extends AutoCommon {
+    @Override
+    public void runOpMode() {
+        super.runOpMode();
+        waitForStart();
+
+        // Variables
+        boolean parking = false;
+
+        double tracking = 500;
+        double distance_traveled = 0;
+        double parking_space = 0;
+        double distancex = 0;
+        double wallDist = 0;
+
+
+        // Calibrate light sensor
+        driveToCalibrateLightSensor();
+        sleep(2000);
+
+        // Travel until the white line
+        double avg_brightness = (robot.maxBrightness + robot.minBrightness) / 2;
+        while (opModeIsActive() && robot.colorSensor.alpha() < avg_brightness) {
+            robot.startMove(0.15, 0, 0, 0);
+        }
+        sleep(1000);
+
+        // Turn 90 degrees
+        turnIMU(-90, 0.15);
+        sleep(1000);
+
+        distance_traveled = robot.distanceSensor.getDistance(DistanceUnit.CM);
+
+        // Drive until the next white line while looking for parking space
+        while (opModeIsActive() && robot.colorSensor.alpha() < avg_brightness && parking  == false) {
+            robot.startMove(0.15, 0, 0, 0);
+
+            wallDist = robot.distanceSensor.getDistance(DistanceUnit.CM);
+            tracking = wallDist;
+
+            telemetry.addData("Distance from parking space: ", tracking - distance_traveled);
+            telemetry.update();
+
+            distancex  = robot.motorLeft.getCurrentPosition();
+            while (tracking - distance_traveled > 30) {
+
+                wallDist = robot.distanceSensor.getDistance(DistanceUnit.CM);
+                tracking = wallDist;
+
+                telemetry.update();
+
+                double currentPos = robot.motorLeft.getCurrentPosition();
+                double parkingDistance = robot.convertDistanceToTicks(30);
+
+                if ( currentPos - distancex >= parkingDistance) {
+
+                    robot.startMove(0, 0, 0, 0);
+                    parking_space = robot.convertTicksToDistance(robot.motorLeft.getCurrentPosition() - distancex);
+
+                    driveDistance(-6, 0, -0.15);
+                    sleep(1000);
+
+                    final double wallDistance = robot.distanceSensor.getDistance(DistanceUnit.CM)  ;
+                    sleep(500);
+
+
+                    driveDistance(0, 40 , 0.15);
+                    sleep(1000);
+
+                    parking = true;
+                }
+
+            }
+        }
+        robot.startMove(0, 0, 0, 0);
+    }
+}
+
+
+
+
+
+
+
+
